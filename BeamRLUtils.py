@@ -40,4 +40,4 @@ class GaussianCenters():
 if __name__ == "__main__":
     gc = GaussianCenters()
     for i in range(5):
-        print(gc.sample())
+        print(gc.sample()[1].shape)
