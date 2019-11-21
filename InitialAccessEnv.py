@@ -36,7 +36,9 @@ class InitialAccessEnv(gym.Env):
     
     def _init_(self,
                num_beams_possible: int,
-               codebook_size: int):
+               codebook_size: int,
+               reward_type = "sum_delay"):
+        self.reward_type = reward_type
         self.num_beams_possible = num_beams_possible
         self.codebook_size = codebook_size
         self.action_space = spaces.MultiBinary(codebook_size)
@@ -51,19 +53,25 @@ class InitialAccessEnv(gym.Env):
         self.IA_thold = 0 
         self.new_UE_idx = 0
         self.existing_UEs = {}
+        self.reachable_UEs_per_beam = {i:[] for i in range(self.codebook_size)}
         self.t = 0
     def seed(self, seed=None):
         self.np_random, seed = seeding.np_random(seed)
         return seed
     
     def step(self, action):
-        
+        ue_idc = self.gen_arriving_ue()
+        nvalid_ue_per_beam = self.beam_association(ue_idc)
+        observation = self.schedule_beam(action)
+        reward = self.get_reward()
         self.t += 1
-        
-        raise NotImplementedError
+        return observation, reward, False, {}
     
     def reset(self):
-        
+        self.new_UE_idx = 0
+        self.existing_UEs = {}
+        self.reachable_UEs_per_beam = {i:[] for i in range(self.codebook_size)}
+        self.t = 0        
         raise NotImplementedError
     
     def beam_association(self, ue_idc:np.array):
@@ -72,21 +80,43 @@ class InitialAccessEnv(gym.Env):
             ue_h: n_ue x n_antenna array of channel matrices of arriving UEs
         procedure:
             1. find the number of UEs that can achieve IA using each beam in codebook_all -> nvalid_ue_per_beam
-            2. store arriving UEs into existing_UEs: ue_idx -> (enter_time, [viable beams])
-        
+            2. store arriving UEs into existing_UEs, dict: ue_idx -> (enter_time, [viable beam indices])
+            3. store arriving UEs into reachable_UEs_per_beam, dict: beam_idx -> [IDs of UEs that can achieve IA w/. this beam]
         """
         ue_h = self.h[ue_idc,:] #n_ue x n_antenna channel matrices
         bf_gains = np.matmul(ue_h, np.transpose(self.codebook_all)) #shape n_ue x codebook_size
-        nvalid_ue_per_beam = np.sum(bf_gains >= self.IA_thold, axis=0)
+        viable_bf = bf_gains >= self.IA_thold
+        nvalid_ue_per_beam = np.sum(viable_bf, axis=0)
         assert len(nvalid_ue_per_beam) == self.codebook_size
         
         ue_store_idc = [self.new_UE_idx+i for i in range(len(ue_idc))]
         self.new_UE_idx += len(ue_idc)
         for i in range(len(ue_idc)):
-            self.existing_UEs[ue_store_idc[i]] = (t, [])
+            self.existing_UEs[ue_store_idc[i]] = (self.t, np.where(viable_bf[i,:]))
         
-        raise NotImplementedError
-        
+        for i in range(self.codebook_size):
+            self.reachable_UEs_per_beam[i].extend(ue_store_idc[np.where(viable_bf[:,i])])
+        return nvalid_ue_per_beam
+    
+    def schedule_beam(self, action:np.array):
+        """
+        input:
+            action: multi-binary codebook_size x 1 array of indices of selected beams
+        procedure:
+            remove UEs from self.existing_UEs which can achieve IA w/. any beam in action
+        output:
+            observation:codebook_size x 1 array of number of UEs served with each selected beam
+        """
+        observation = np.zeros((self.codebook_size))
+        selected_beams = np.where(action)
+        for beam in selected_beams:
+            scheduled_ues = self.reachable_UEs_per_beam[beam]
+            observation[beam] = len(scheduled_ues)
+            self.reachable_UEs_per_beam[beam] = []
+            for ue in scheduled_ues:
+                enter_time, viable_beams = self.existing_UEs.pop(ue)
+        return observation
+    
     def closest_ue(self, ue_pos:np.array):
         """
         input: 
@@ -107,7 +137,23 @@ class InitialAccessEnv(gym.Env):
         n_ue, ue_raw_pos = self.gaussian_center.sample() #ue_raw_pos has shape n_ue x 2
         ue_idc = self.closest_ue(ue_raw_pos) #idx of closest ues  
         return ue_idc
-             
+    
+    
+    def get_reward(self):
+        """
+        return current reward:
+            1. sum delay
+            2. max delay
+        """
+        delays = []
+        for ue in self.existing_UEs:
+            time_enter = ue[0]
+            delays.append(self.t - time_enter)
+        if self.reward_type == "sum_delay":
+            reward = sum(delays)
+        elif self.reward_type == "max_delay":
+            reward = max(delays)
+        return reward
         
 
 import matplotlib.pyplot as plt
