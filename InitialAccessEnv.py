@@ -13,6 +13,7 @@ from BeamRLUtils import GaussianCenters
 h_imag_fname = "H_Matrices FineGrid/MISO_Static_FineGrid_Hmatrices_imag.npy"
 h_real_fname = "H_Matrices FineGrid/MISO_Static_FineGrid_Hmatrices_real.npy"
 ue_loc_fname = "H_Matrices FineGrid/MISO_Static_FineGrid_UE_location.npy"
+default_nssb = 32
 IA_rsrp_threshold = 0
 n_antenna = 64
 oversample_factor = 4
@@ -34,9 +35,9 @@ for i in range(nseg):
 
 class InitialAccessEnv(gym.Env):
     
-    def _init_(self,
-               num_beams_possible: int,
-               codebook_size: int,
+    def __init__(self,
+               num_beams_possible: int = default_nssb,
+               codebook_size: int = nseg,
                reward_type = "sum_delay"):
         self.reward_type = reward_type
         self.num_beams_possible = num_beams_possible
@@ -71,8 +72,10 @@ class InitialAccessEnv(gym.Env):
         self.new_UE_idx = 0
         self.existing_UEs = {}
         self.reachable_UEs_per_beam = {i:[] for i in range(self.codebook_size)}
-        self.t = 0        
-        raise NotImplementedError
+        self.t = 0    
+        ue_idc = self.gen_arriving_ue()
+        nvalid_ue_per_beam = self.beam_association(ue_idc)
+        return nvalid_ue_per_beam
     
     def beam_association(self, ue_idc:np.array):
         """
@@ -84,15 +87,15 @@ class InitialAccessEnv(gym.Env):
             3. store arriving UEs into reachable_UEs_per_beam, dict: beam_idx -> [IDs of UEs that can achieve IA w/. this beam]
         """
         ue_h = self.h[ue_idc,:] #n_ue x n_antenna channel matrices
-        bf_gains = np.matmul(ue_h, np.transpose(self.codebook_all)) #shape n_ue x codebook_size
+        bf_gains = np.absolute(np.matmul(ue_h, np.transpose(self.codebook_all)))**2 #shape n_ue x codebook_size
         viable_bf = bf_gains >= self.IA_thold
         nvalid_ue_per_beam = np.sum(viable_bf, axis=0)
         assert len(nvalid_ue_per_beam) == self.codebook_size
         
-        ue_store_idc = [self.new_UE_idx+i for i in range(len(ue_idc))]
+        ue_store_idc = np.array([self.new_UE_idx+i for i in range(len(ue_idc))])
         self.new_UE_idx += len(ue_idc)
         for i in range(len(ue_idc)):
-            self.existing_UEs[ue_store_idc[i]] = (self.t, np.where(viable_bf[i,:]))
+            self.existing_UEs[ue_store_idc[i]] = (self.t, np.where(viable_bf[i,:])[0])
         
         for i in range(self.codebook_size):
             self.reachable_UEs_per_beam[i].extend(ue_store_idc[np.where(viable_bf[:,i])])
@@ -108,13 +111,17 @@ class InitialAccessEnv(gym.Env):
             observation:codebook_size x 1 array of number of UEs served with each selected beam
         """
         observation = np.zeros((self.codebook_size))
-        selected_beams = np.where(action)
+        selected_beams = np.where(action)[0]
         for beam in selected_beams:
             scheduled_ues = self.reachable_UEs_per_beam[beam]
             observation[beam] = len(scheduled_ues)
+            #debug this: clearing one beam not enough
             self.reachable_UEs_per_beam[beam] = []
             for ue in scheduled_ues:
                 enter_time, viable_beams = self.existing_UEs.pop(ue)
+                for vbeam in viable_beams:
+                    if not vbeam == beam:
+                        self.reachable_UEs_per_beam[vbeam].remove(ue)
         return observation
     
     def closest_ue(self, ue_pos:np.array):
@@ -147,7 +154,7 @@ class InitialAccessEnv(gym.Env):
         """
         delays = []
         for ue in self.existing_UEs:
-            time_enter = ue[0]
+            time_enter = self.existing_UEs[ue][0]
             delays.append(self.t - time_enter)
         if self.reward_type == "sum_delay":
             reward = sum(delays)
@@ -159,9 +166,10 @@ class InitialAccessEnv(gym.Env):
 import matplotlib.pyplot as plt
        
 if __name__ == "__main__":
-    loc = np.load(ue_loc_fname)
-    x = loc[:,0]
-    y = loc[:,1]
-    plt.figure(figsize=(16, 16))
-    plt.plot(x,y)
-    plt.show()
+    env = InitialAccessEnv()
+    s = env.reset()
+    for i in range(10):
+        a_t = np.zeros((nseg)).astype(int)
+        s_t, r_t, done, info = env.step(a_t)
+        print("step")
+        print([(i, env.existing_UEs[i][0]) for i in env.existing_UEs], r_t)
