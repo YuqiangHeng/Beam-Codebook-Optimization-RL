@@ -8,6 +8,7 @@ import numpy as np
 from typing import Tuple
 
 default_means = np.array([[640,470],[600,460],[680,460],[640,400]])
+bs_loc = [641,435]
 default_covs = np.array([[[5,0],[0,5]] for i in default_means])
 default_arr_rates = np.array([5 for i in default_means])
 
