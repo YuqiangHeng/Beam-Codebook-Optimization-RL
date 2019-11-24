@@ -66,7 +66,9 @@ class InitialAccessEnv(gym.Env):
         ue_idc = self.gen_arriving_ue()
         nvalid_ue_per_beam = self.beam_association(ue_idc)
         observation = self.schedule_beam(action)
+        self.previous_num_ue_served = sum(observation)
         reward = self.get_reward()
+        self.previous_reward = reward
         self.t += 1
         return observation, reward, False, {}
     
@@ -79,9 +81,9 @@ class InitialAccessEnv(gym.Env):
         nvalid_ue_per_beam = self.beam_association(ue_idc)
         return nvalid_ue_per_beam
     
-    def render(self):
-        
-        raise NotImplementedError
+    def render(self, mode='human', close=False):
+        ptfmt = "t = %f, previous num UEs served = %f, previous reward = %f"%(self.t, self.previous_num_ue_served, self.previous_reward)
+        print(ptfmt)
     
     def beam_association(self, ue_idc:np.array):
         """

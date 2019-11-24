@@ -100,7 +100,7 @@ h_imag_fname = "H_Matrices FineGrid/MISO_Static_FineGrid_Hmatrices_imag.npy"
 h_real_fname = "H_Matrices FineGrid/MISO_Static_FineGrid_Hmatrices_real.npy"
 ue_loc_fname = "H_Matrices FineGrid/MISO_Static_FineGrid_UE_location.npy"
 default_nssb = 32
-IA_rsrp_threshold = 8 #min snr for BPSK 80MHZ BW is 8dB, for BPSK 160MHz BW is 11 dB
+IA_SNR_threshold = 8 #min snr for BPSK 80MHZ BW is 8dB, for BPSK 160MHz BW is 11 dB
 n_antenna = 64
 oversample_factor = 4
 
@@ -124,7 +124,8 @@ class InitialAccessEnv(gym.Env):
     def __init__(self,
                num_beams_possible: int = default_nssb,
                codebook_size: int = nseg,
-               reward_type = "sum_delay"):
+               reward_type = "sum_delay",
+               snr_threshold = IA_SNR_threshold):
         self.reward_type = reward_type
         self.num_beams_possible = num_beams_possible
         self.codebook_size = codebook_size
@@ -138,7 +139,7 @@ class InitialAccessEnv(gym.Env):
 #        self.unique_x = np.unique(self.ue_loc[:,0])
 #        self.unique_y = np.unique(self.ue_loc[:,1])
         self.codebook_all = codebook_all
-        self.IA_thold = 0 
+        self.IA_thold = snr_threshold 
         self.new_UE_idx = 0
         self.existing_UEs = {}
         self.reachable_UEs_per_beam = {i:[] for i in range(self.codebook_size)}
@@ -286,7 +287,7 @@ if __name__ == "__main__":
     
     # Finally, we configure and compile our agent. You can use every built-in Keras optimizer and
     # even the metrics!
-    memory = SequentialMemory(limit=50000, window_length=1)
+    memory = SequentialMemory(limit=5000, window_length=1)
     policy = MaxBoltzmannQMultiBinaryPolicy()
     dqn = DQNAgent(model=model, nb_actions=nb_actions, memory=memory, nb_steps_warmup=10,
                    target_model_update=1e-2, policy=policy)
@@ -295,7 +296,7 @@ if __name__ == "__main__":
     # Okay, now it's time to learn something! We visualize the training here for show, but this
     # slows down training quite a lot. You can always safely abort the training prematurely using
     # Ctrl + C.
-    dqn.fit(env, nb_steps=50000, visualize=True, verbose=2)
+    dqn.fit(env, nb_steps=5000, visualize=True, verbose=2)
     
     # After training is done, we save the final weights.
     #dqn.save_weights('dqn_{}_weights.h5f'.format(ENV_NAME), overwrite=True)
