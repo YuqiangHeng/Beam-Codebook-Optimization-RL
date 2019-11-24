@@ -14,7 +14,7 @@ h_imag_fname = "H_Matrices FineGrid/MISO_Static_FineGrid_Hmatrices_imag.npy"
 h_real_fname = "H_Matrices FineGrid/MISO_Static_FineGrid_Hmatrices_real.npy"
 ue_loc_fname = "H_Matrices FineGrid/MISO_Static_FineGrid_UE_location.npy"
 default_nssb = 32
-IA_rsrp_threshold = 0
+IA_rsrp_threshold = 8 #min snr for BPSK 80MHZ BW is 8dB, for BPSK 160MHz BW is 11 dB
 n_antenna = 64
 oversample_factor = 4
 
@@ -88,7 +88,8 @@ class InitialAccessEnv(gym.Env):
         """
         ue_h = self.h[ue_idc,:] #n_ue x n_antenna channel matrices
         bf_gains = np.absolute(np.matmul(ue_h, np.transpose(self.codebook_all)))**2 #shape n_ue x codebook_size
-        viable_bf = bf_gains >= self.IA_thold
+        all_snr = 30+10*np.log10(bf_gains)-(-94)
+        viable_bf = all_snr >= self.IA_thold
         nvalid_ue_per_beam = np.sum(viable_bf, axis=0)
         assert len(nvalid_ue_per_beam) == self.codebook_size
         
