@@ -43,7 +43,7 @@ class InitialAccessEnv(gym.Env):
         self.num_beams_possible = num_beams_possible
         self.codebook_size = codebook_size
         self.action_space = spaces.MultiBinary(codebook_size)
-        self.observation_space = spaces.MultiDiscrete(codebook_size)
+        self.observation_space = spaces.MultiDiscrete(np.inf*np.ones(codebook_size))
         self.n_ue_per_beam = np.zeros((codebook_size))
         self.true_state = np.zeros((codebook_size))
         self.gaussian_center = GaussianCenters()
@@ -77,6 +77,10 @@ class InitialAccessEnv(gym.Env):
         ue_idc = self.gen_arriving_ue()
         nvalid_ue_per_beam = self.beam_association(ue_idc)
         return nvalid_ue_per_beam
+    
+    def render(self):
+        
+        raise NotImplementedError
     
     def beam_association(self, ue_idc:np.array):
         """
