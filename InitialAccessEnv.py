@@ -43,6 +43,7 @@ class InitialAccessEnv(gym.Env):
         self.num_beams_possible = num_beams_possible
         self.codebook_size = codebook_size
         self.action_space = spaces.MultiBinary(codebook_size)
+        self.observation_space = spaces.MultiDiscrete(codebook_size)
         self.n_ue_per_beam = np.zeros((codebook_size))
         self.true_state = np.zeros((codebook_size))
         self.gaussian_center = GaussianCenters()
