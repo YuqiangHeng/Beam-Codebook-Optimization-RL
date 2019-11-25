@@ -105,7 +105,8 @@ class InitialAccessEnv(gym.Env):
         ue_h = self.h[ue_idc,:] #n_ue x n_antenna channel matrices
         bf_gains = np.absolute(np.matmul(ue_h, np.transpose(self.codebook_all)))**2 #shape n_ue x codebook_size
         all_snr = 30+10*np.log10(bf_gains)-(-94)
-        viable_bf = all_snr >= self.IA_thold
+#        viable_bf = all_snr >= self.IA_thold
+        viable_bf = np.transpose(np.transpose(all_snr) >= self.IA_thold[ue_idc])
         nvalid_ue_per_beam = np.sum(viable_bf, axis=0)
         assert len(nvalid_ue_per_beam) == self.codebook_size
         
