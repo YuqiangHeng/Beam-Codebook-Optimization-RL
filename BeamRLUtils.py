@@ -80,7 +80,7 @@ class MaxBoltzmannQMultiBinaryPolicy(Policy):
             active_idx = np.random.choice(a= nb_actions, size = self.num_selected, p=probs)
             action[active_idx] = 1
         else:
-            active_idx = q_values.argsort[-self.num_selected:][::-1]
+            active_idx = q_values.argsort()[-self.num_selected:][::-1]
             action[active_idx] = 1
 #            action = np.argmax(q_values)
         return action

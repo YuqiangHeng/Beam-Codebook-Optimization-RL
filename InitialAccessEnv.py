@@ -178,7 +178,7 @@ class InitialAccessEnv(gym.Env):
             reward = sum(delays)
         elif self.reward_type == "max_delay":
             reward = max(delays)
-        return reward
+        return -reward
         
 
 import matplotlib.pyplot as plt
