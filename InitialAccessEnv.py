@@ -25,6 +25,7 @@ bins = np.linspace(-np.pi/2,np.pi/2,nseg+1)
 #bins = [i*2*np.pi/nseg for i in range(nseg+1)]
 bfdirections = [(bins[i]+bins[i+1])/2 for i in range(nseg)]
 codebook_all = np.zeros((nseg,n_antenna),dtype=np.complex_)
+
 for i in range(nseg):
     phi = bfdirections[i]
     #array response vector original
@@ -33,13 +34,20 @@ for i in range(nseg):
     #arr_response_vec = [1j*np.pi*k*np.sin(phi+np.pi/2) for k in range(64)]
     codebook_all[i,:] = np.exp(arr_response_vec)/np.sqrt(n_antenna)
 
+all_h = np.load(h_imag_fname)*1j+np.load(h_real_fname)
+
+bf_gains = np.absolute(np.matmul(all_h, np.transpose(codebook_all)))**2 #shape n_ue x codebook_size
+all_snr = 30+10*np.log10(bf_gains)-(-94)
+IA_thold_pencentile = 95
+thold_per_ue = np.percentile(all_snr,IA_thold_pencentile,axis=1)
+
 class InitialAccessEnv(gym.Env):
     
     def __init__(self,
                num_beams_possible: int = default_nssb,
                codebook_size: int = nseg,
                reward_type = "sum_delay",
-               snr_threshold = IA_SNR_threshold):
+               snr_threshold = thold_per_ue):
         self.reward_type = reward_type
         self.num_beams_possible = num_beams_possible
         self.codebook_size = codebook_size

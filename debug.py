@@ -100,7 +100,7 @@ h_imag_fname = "H_Matrices FineGrid/MISO_Static_FineGrid_Hmatrices_imag.npy"
 h_real_fname = "H_Matrices FineGrid/MISO_Static_FineGrid_Hmatrices_real.npy"
 ue_loc_fname = "H_Matrices FineGrid/MISO_Static_FineGrid_UE_location.npy"
 default_nssb = 32
-IA_SNR_threshold = 8 #min snr for BPSK 80MHZ BW is 8dB, for BPSK 160MHz BW is 11 dB
+IA_SNR_threshold = 11 #min snr for BPSK 80MHZ BW is 8dB, for BPSK 160MHz BW is 11 dB
 n_antenna = 64
 oversample_factor = 4
 
@@ -119,13 +119,20 @@ for i in range(nseg):
     #arr_response_vec = [1j*np.pi*k*np.sin(phi+np.pi/2) for k in range(64)]
     codebook_all[i,:] = np.exp(arr_response_vec)/np.sqrt(n_antenna)
 
+all_h = np.load(h_imag_fname)*1j+np.load(h_real_fname)
+
+bf_gains = np.absolute(np.matmul(all_h, np.transpose(codebook_all)))**2 #shape n_ue x codebook_size
+all_snr = 30+10*np.log10(bf_gains)-(-94)
+IA_thold_pencentile = 95
+thold_per_ue = np.percentile(all_snr,IA_thold_pencentile,axis=1)
+
 class InitialAccessEnv(gym.Env):
     
     def __init__(self,
                num_beams_possible: int = default_nssb,
                codebook_size: int = nseg,
                reward_type = "sum_delay",
-               snr_threshold = IA_SNR_threshold):
+               snr_threshold = thold_per_ue):
         self.reward_type = reward_type
         self.num_beams_possible = num_beams_possible
         self.codebook_size = codebook_size
@@ -158,6 +165,7 @@ class InitialAccessEnv(gym.Env):
         reward = self.get_reward()
         self.previous_reward = reward
         self.t += 1
+        print(reward)
         return observation, reward, False, {}
     
     def reset(self):
@@ -185,7 +193,7 @@ class InitialAccessEnv(gym.Env):
         ue_h = self.h[ue_idc,:] #n_ue x n_antenna channel matrices
         bf_gains = np.absolute(np.matmul(ue_h, np.transpose(self.codebook_all)))**2 #shape n_ue x codebook_size
         all_snr = 30+10*np.log10(bf_gains)-(-94)
-        viable_bf = all_snr >= self.IA_thold
+        viable_bf = np.transpose(np.transpose(all_snr) >= self.IA_thold[ue_idc])
         nvalid_ue_per_beam = np.sum(viable_bf, axis=0)
         assert len(nvalid_ue_per_beam) == self.codebook_size
         
