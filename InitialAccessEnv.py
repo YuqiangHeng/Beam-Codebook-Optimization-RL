@@ -13,72 +13,107 @@ from BeamRLUtils import GaussianCenters
 h_imag_fname = "H_Matrices FineGrid/MISO_Static_FineGrid_Hmatrices_imag.npy"
 h_real_fname = "H_Matrices FineGrid/MISO_Static_FineGrid_Hmatrices_real.npy"
 ue_loc_fname = "H_Matrices FineGrid/MISO_Static_FineGrid_UE_location.npy"
-default_nssb = 32
-IA_SNR_threshold = 8 #min snr for BPSK 80MHZ BW is 8dB, for BPSK 160MHz BW is 11 dB
-n_antenna = 64
-oversample_factor = 4
+#default_nssb = 32
+##IA_SNR_threshold = 8 #min snr for BPSK 80MHZ BW is 8dB, for BPSK 160MHz BW is 11 dB
+##n_antenna = 64
+##oversample_factor = 2
+##
+##nseg = int(n_antenna*oversample_factor)
+###generate array response vectors
+##bins = np.linspace(-np.pi/2,np.pi/2,nseg+1)
+###bins = [(i-nseg/2)*2*np.pi/nseg for i in range(nseg+1)]
+###bins = [i*2*np.pi/nseg for i in range(nseg+1)]
+##bfdirections = [(bins[i]+bins[i+1])/2 for i in range(nseg)]
+##
+##bfdirections = np.arccos(np.linspace(np.cos(0),np.cos(np.pi-1e-6),nseg))
+##codebook_all = np.zeros((nseg,n_antenna),dtype=np.complex_)
+##
+##for i in range(nseg):
+##    phi = bfdirections[i]
+##    #array response vector original
+##    arr_response_vec = [1j*np.pi*k*np.sin(phi) for k in range(n_antenna)]
+##    arr_response_vec = [-1j*np.pi*k*np.cos(phi) for k in range(n_antenna)]
+##    #array response vector for rotated ULA
+##    #arr_response_vec = [1j*np.pi*k*np.sin(phi+np.pi/2) for k in range(64)]
+##    codebook_all[i,:] = np.exp(arr_response_vec)/np.sqrt(n_antenna)
+#
+#all_h = np.load(h_imag_fname)*1j+np.load(h_real_fname)
+#
+#bf_gains = np.absolute(np.matmul(all_h, np.transpose(np.conj(codebook_all))))**2 #shape n_ue x codebook_size
+#all_snr = 30+10*np.log10(bf_gains)-(-94)
+#IA_thold_pencentile = 95
+#thold_per_ue = np.percentile(all_snr,IA_thold_pencentile,axis=1)
 
-nseg = int(n_antenna*oversample_factor)
-#generate array response vectors
-bins = np.linspace(-np.pi/2,np.pi/2,nseg+1)
-#bins = [(i-nseg/2)*2*np.pi/nseg for i in range(nseg+1)]
-#bins = [i*2*np.pi/nseg for i in range(nseg+1)]
-bfdirections = [(bins[i]+bins[i+1])/2 for i in range(nseg)]
-codebook_all = np.zeros((nseg,n_antenna),dtype=np.complex_)
+def DFT_codebook(oversampling_factor):
+    n_antenna = 64
+    nseg = int(n_antenna*oversampling_factor)
+    bfdirections = np.arccos(np.linspace(np.cos(0),np.cos(np.pi-1e-6),nseg))
+    codebook_all = np.zeros((nseg,n_antenna),dtype=np.complex_)
+    
+    for i in range(nseg):
+        phi = bfdirections[i]
+        #array response vector original
+        arr_response_vec = [-1j*np.pi*k*np.cos(phi) for k in range(n_antenna)]
+        #array response vector for rotated ULA
+        #arr_response_vec = [1j*np.pi*k*np.sin(phi+np.pi/2) for k in range(64)]
+        codebook_all[i,:] = np.exp(arr_response_vec)/np.sqrt(n_antenna)
+    return codebook_all, bfdirections
 
-for i in range(nseg):
-    phi = bfdirections[i]
-    #array response vector original
-    arr_response_vec = [1j*np.pi*k*np.sin(phi) for k in range(n_antenna)]
-    #array response vector for rotated ULA
-    #arr_response_vec = [1j*np.pi*k*np.sin(phi+np.pi/2) for k in range(64)]
-    codebook_all[i,:] = np.exp(arr_response_vec)/np.sqrt(n_antenna)
-
-all_h = np.load(h_imag_fname)*1j+np.load(h_real_fname)
-
-bf_gains = np.absolute(np.matmul(all_h, np.transpose(codebook_all)))**2 #shape n_ue x codebook_size
-all_snr = 30+10*np.log10(bf_gains)-(-94)
-IA_thold_pencentile = 95
-thold_per_ue = np.percentile(all_snr,IA_thold_pencentile,axis=1)
 
 class InitialAccessEnv(gym.Env):
     
-    def __init__(self,
-               num_beams_possible: int = default_nssb,
-               codebook_size: int = nseg,
-               reward_type = "sum_delay",
-               snr_threshold = thold_per_ue):
-        self.reward_type = reward_type
+    def __init__(self, oversampling_factor = 1,
+               num_beams_possible: int = 32,
+               snr_thold_percentil = 100,
+               bandit = False):
+        self.refresh = bandit
+        self.n_antenna = 64
+        self.oversampling_factor = oversampling_factor
+        self.codebook_size = int(self.n_antenna*self.oversampling_factor)
+        self.snr_thold_percentil = snr_thold_percentil
         self.num_beams_possible = num_beams_possible
-        self.codebook_size = codebook_size
-        self.action_space = spaces.MultiBinary(codebook_size)
-        self.observation_space = spaces.MultiDiscrete(np.inf*np.ones(codebook_size))
-        self.n_ue_per_beam = np.zeros((codebook_size))
-        self.true_state = np.zeros((codebook_size))
+        self.action_space = spaces.MultiBinary(self.codebook_size)
+        self.observation_space = spaces.MultiDiscrete(np.inf*np.ones(self.codebook_size))
+        self.n_ue_per_beam = np.zeros((self.codebook_size))
+        self.true_state = np.zeros((self.codebook_size))
         self.gaussian_center = GaussianCenters()
         self.h = np.load(h_real_fname) + 1j*np.load(h_imag_fname)
         self.ue_loc = np.load(ue_loc_fname)
 #        self.unique_x = np.unique(self.ue_loc[:,0])
 #        self.unique_y = np.unique(self.ue_loc[:,1])
-        self.codebook_all = codebook_all
-        self.IA_thold = snr_threshold 
+        self.codebook_all, self.bf_directions = DFT_codebook(self.oversampling_factor)
+        self.IA_thold = self.calc_IA_thold() 
         self.new_UE_idx = 0
         self.existing_UEs = {}
         self.reachable_UEs_per_beam = {i:[] for i in range(self.codebook_size)}
         self.t = 0
+        self.step_reward_log = []
     def seed(self, seed=None):
         self.np_random, seed = seeding.np_random(seed)
         return seed
     
+    def calc_IA_thold(self):
+        bf_gains = np.absolute(np.matmul(self.h, np.transpose(np.conj(self.codebook_all))))**2 #shape n_ue x codebook_size
+        all_snr = 30+10*np.log10(bf_gains)-(-94)
+        thold_per_ue = np.percentile(all_snr,self.snr_thold_percentil,axis=1)
+        return thold_per_ue
+    
     def step(self, action):
+        if self.refresh:
+            self.existing_UEs = {}
+            self.reachable_UEs_per_beam = {i:[] for i in range(self.codebook_size)}
+#        print(self.get_info()["nue_per_beam"])
         ue_idc = self.gen_arriving_ue()
-        nvalid_ue_per_beam = self.beam_association(ue_idc)
+        self.nvalid_ue_per_beam = self.beam_association(ue_idc)
         observation = self.schedule_beam(action)
         self.previous_num_ue_served = sum(observation)
-        reward = self.get_reward()
+#        delay = self.get_delay() #current delay metric in the system
+        reward = sum(observation)
         self.previous_reward = reward
         self.t += 1
-        return observation, reward, False, {}
+        #reward is total number of UEs scheduled
+        self.step_reward_log.append(sum(observation))
+        return observation, reward, False, {"new_arrival":self.nvalid_ue_per_beam, "nue_per_beam":[len(self.reachable_UEs_per_beam[i]) for i in range(self.codebook_size)]}
     
     def reset(self):
         self.new_UE_idx = 0
@@ -87,6 +122,7 @@ class InitialAccessEnv(gym.Env):
         self.t = 0    
         ue_idc = self.gen_arriving_ue()
         nvalid_ue_per_beam = self.beam_association(ue_idc)
+        self.step_reward_log = []
         return nvalid_ue_per_beam
     
     def render(self, mode='human', close=False):
@@ -127,6 +163,8 @@ class InitialAccessEnv(gym.Env):
             remove UEs from self.existing_UEs which can achieve IA w/. any beam in action
         output:
             observation:codebook_size x 1 array of number of UEs served with each selected beam
+        todo:
+            schedule UE with the beam with highest RSRP in selected beams
         """
         observation = np.zeros((self.codebook_size))
         selected_beams = np.where(action)[0]
@@ -164,7 +202,7 @@ class InitialAccessEnv(gym.Env):
         return ue_idc
     
     
-    def get_reward(self):
+    def get_delay(self):
         """
         return current reward:
             1. sum delay
@@ -174,20 +212,29 @@ class InitialAccessEnv(gym.Env):
         for ue in self.existing_UEs:
             time_enter = self.existing_UEs[ue][0]
             delays.append(self.t - time_enter)
-        if self.reward_type == "sum_delay":
-            reward = sum(delays)
-        elif self.reward_type == "max_delay":
-            reward = max(delays)
-        return -reward
+        sum_delay = sum(delays)
+        max_delay = max(delays)
+        return sum_delay, max_delay
+    
+    def get_info(self):
+#        return {"new_arrival":self.nvalid_ue_per_beam, "nue_per_beam":[len(self.reachable_UEs_per_beam[i]) for i in range(self.codebook_size)]}
+        return {"nue_per_beam":[len(self.reachable_UEs_per_beam[i]) for i in range(self.codebook_size)]}
         
 
 import matplotlib.pyplot as plt
-       
+from tqdm import tqdm     
 if __name__ == "__main__":
-    env = InitialAccessEnv()
+    env = InitialAccessEnv(bandit = True)
+    nseg = env.codebook_size
     s = env.reset()
-    for i in range(10):
+    all_ues = np.zeros((nseg))
+    for i in tqdm(range(100)):
+        all_ues += env.get_info()["nue_per_beam"]
         a_t = np.zeros((nseg)).astype(int)
         s_t, r_t, done, info = env.step(a_t)
-        print("step")
-        print([(i, env.existing_UEs[i][0]) for i in env.existing_UEs], r_t)
+        
+#    plt.bar(np.arange(nseg), env.get_info()["nue_per_beam"])
+#    print(np.count_nonzero(env.get_info()["nue_per_beam"]))
+    plt.bar(np.arange(nseg), all_ues)
+    print(np.count_nonzero(all_ues))
+    

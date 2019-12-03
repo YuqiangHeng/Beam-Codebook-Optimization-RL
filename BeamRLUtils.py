@@ -6,13 +6,14 @@ Created on Tue Nov 19 14:55:17 2019
 """
 import numpy as np
 from typing import Tuple
-from rl.policy import Policy
 
 
+time_factor = 20
+cov_factor = 5
 default_means = np.array([[640,470],[600,460],[680,460],[640,400]])
 bs_loc = [641,435]
-default_covs = np.array([[[5,0],[0,5]] for i in default_means])
-default_arr_rates = np.array([5 for i in default_means])
+default_covs = np.array([[[cov_factor,0],[0,cov_factor]] for i in default_means])
+default_arr_rates = np.array([time_factor for i in default_means])
 
 class GaussianCenters():
     def __init__(self, 
@@ -46,53 +47,3 @@ if __name__ == "__main__":
         print(gc.sample()[1].shape)
         
 
-class MaxBoltzmannQMultiBinaryPolicy(Policy):
-    """
-    A combination of the eps-greedy and Boltzman q-policy.
-    Wiering, M.: Explorations in Efficient Reinforcement Learning.
-    PhD thesis, University of Amsterdam, Amsterdam (1999)
-    https://pure.uva.nl/ws/files/3153478/8461_UBA003000033.pdf
-    Adapted to multibinary action space
-    """
-    def __init__(self, num_selected = 32, eps=.1, tau=1., clip=(-500., 500.)):
-        super(MaxBoltzmannQMultiBinaryPolicy, self).__init__()
-        self.eps = eps
-        self.tau = tau
-        self.clip = clip
-        self.num_selected = num_selected
-
-    def select_action(self, q_values):
-        """Return the selected action
-        The selected action follows the BoltzmannQPolicy with probability epsilon
-        or return the Greedy Policy with probability (1 - epsilon)
-        # Arguments
-            q_values (np.ndarray): List of the estimations of Q for each action
-        # Returns
-            Selection action
-        """
-        assert q_values.ndim == 1
-        q_values = q_values.astype('float64')
-        nb_actions = q_values.shape[0]
-        action = np.zeros((nb_actions)).astype(int)
-        if np.random.uniform() < self.eps:
-            exp_values = np.exp(np.clip(q_values / self.tau, self.clip[0], self.clip[1]))
-            probs = exp_values / np.sum(exp_values)
-            active_idx = np.random.choice(a= nb_actions, size = self.num_selected, p=probs)
-            action[active_idx] = 1
-        else:
-            active_idx = q_values.argsort()[-self.num_selected:][::-1]
-            action[active_idx] = 1
-#            action = np.argmax(q_values)
-        return action
-
-    def get_config(self):
-        """Return configurations of MaxBoltzmannQPolicy
-        # Returns
-            Dict of config
-        """
-        config = super(MaxBoltzmannQMultiBinaryPolicy, self).get_config()
-        config['eps'] = self.eps
-        config['tau'] = self.tau
-        config['clip'] = self.clip
-        config['num_selected'] = self.num_selected
-        return config 
