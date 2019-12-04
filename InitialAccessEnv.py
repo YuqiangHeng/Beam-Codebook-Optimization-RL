@@ -65,9 +65,13 @@ class InitialAccessEnv(gym.Env):
     def __init__(self, oversampling_factor = 1,
                num_beams_possible: int = 32,
                snr_thold_percentil = 100,
+               mean_arr_rate = 10,
+               cluster_var = 5,
                bandit = False):
         self.refresh = bandit
         self.n_antenna = 64
+        self.mean_arr_rate = mean_arr_rate
+        self.cluster_var = cluster_var
         self.oversampling_factor = oversampling_factor
         self.codebook_size = int(self.n_antenna*self.oversampling_factor)
         self.snr_thold_percentil = snr_thold_percentil
@@ -76,7 +80,7 @@ class InitialAccessEnv(gym.Env):
         self.observation_space = spaces.MultiDiscrete(np.inf*np.ones(self.codebook_size))
         self.n_ue_per_beam = np.zeros((self.codebook_size))
         self.true_state = np.zeros((self.codebook_size))
-        self.gaussian_center = GaussianCenters()
+        self.gaussian_center = GaussianCenters(arrival_rate = self.mean_arr_rate, cluster_variance = self.cluster_var)
         self.h = np.load(h_real_fname) + 1j*np.load(h_imag_fname)
         self.ue_loc = np.load(ue_loc_fname)
 #        self.unique_x = np.unique(self.ue_loc[:,0])
