@@ -200,8 +200,8 @@ if __name__ == "__main__":
     n_antenna = 64
     arr_rate = 5
     n_ssb = 32
-    oversample_f = 4
-    snr_pt = 95
+    oversample_f = 1
+    snr_pt = 100
     n_run = 10
     n_train = 500
     test_interval = 10
