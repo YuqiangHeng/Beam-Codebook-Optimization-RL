@@ -1,5 +1,0 @@
-# Questions
-
-Q1: Same user being assigned to multiple beams. This means there is correlation among state?
-Q2: InitialAccessEnv -> def schedule_beam:
-	A UE can be reachable by multiple beams, which beam is it finally served by? First come first serve?

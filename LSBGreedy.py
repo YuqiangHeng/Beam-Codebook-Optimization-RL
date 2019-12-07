@@ -10,14 +10,14 @@ import numpy as np
 #import torch
 #import torch.nn as nn
 #from torch.autograd import Variable
-#from InitialAccessEnv import InitialAccessEnv
-#import matplotlib.pyplot as plt
+from InitialAccessEnv import InitialAccessEnv
+import matplotlib.pyplot as plt
 import time
-
+from tqdm import tqdm  
 
 default_nssb = 32
 n_antenna = 64
-oversample_factor = 1
+oversample_factor = 4
 
 nseg = int(n_antenna*oversample_factor)
 #generate array response vectors
@@ -98,6 +98,7 @@ def incremental_util_vec(a, At, s):
         return raw_utility_vec
 
 def LSBGreedy(env:gym.Env, num_episodes, num_steps):
+    rewards = np.zeros((num_episodes,num_steps))
     for epi_idx in range(num_episodes):
         env.reset()
 #        beam_schedule_time_log = {i:0 for i in range(codebook_size)} 
@@ -111,10 +112,10 @@ def LSBGreedy(env:gym.Env, num_episodes, num_steps):
         bt = np.zeros(codebook_size)
         wt = np.matmul(np.linalg.inv(Mt),bt) #may use pseudoinverse for stability
         At = []
-        for t in range(num_steps):
+        for t in tqdm(range(num_steps)):
             cov_matrix = np.zeros((codebook_size,codebook_size))
             delta_vec = []
-            t1 = time.time()
+#            t1 = time.time()
             for l in range(num_beams_sel):
                 if l == 0:
                     sel = np.argmax(num_ue_per_beam)
@@ -134,14 +135,15 @@ def LSBGreedy(env:gym.Env, num_episodes, num_steps):
                 delta_vec.append(delta_t_l)
                 cov_matrix += np.outer(delta_t_l,delta_t_l)
                 At.append(sel)
-            t2 = time.time()
+#            t2 = time.time()
 #            print('Time per step is %2.2f seconds' %(t2-t1))
             Mt += cov_matrix
-            sorted_At = np.sort(At)
+#            sorted_At = np.sort(At)
             multi_binary_action = np.zeros(codebook_size).astype(int)
             multi_binary_action[At] = 1
             s_t_1, r_t, done, info = env.step(multi_binary_action)
-            print('reward is %2.2f' %(r_t))
+            rewards[epi_idx,t] = r_t
+#            print('reward is %2.2f' %(r_t))
             for i in range(num_beams_sel):
                 bt += s_t_1[At[i]]*delta_vec[i]
             #update estimate of num_ue_per_beam
@@ -159,7 +161,7 @@ def LSBGreedy(env:gym.Env, num_episodes, num_steps):
             num_ue_per_beam = env.get_info()["nue_per_beam"]
             wt = np.matmul(np.linalg.inv(Mt),bt)
             At = []
-        
+    return rewards
     #select actions 
     
 #def LSBGreedy(env: gym.Env):
@@ -168,8 +170,28 @@ def LSBGreedy(env:gym.Env, num_episodes, num_steps):
 #    while True:
         
 if __name__ == "__main__":
-    env = InitialAccessEnv()
-    np.random.seed(123)
-    env.seed(123)
-    LSBGreedy(env,100,300)
+    codebook_size = 256
+    o_f = 4
+    n_ssb = 32
+    snr_pt = 95
+    n_run = 10
+    n_train = 500
+    test_interval = 50
+    all_rewards = np.zeros((n_run,n_train))
+    for run_idx in range(n_run):
+        env = InitialAccessEnv(oversampling_factor=4,num_beams_possible=32,snr_thold_percentil = 95, bandit=False)
+        rewards = LSBGreedy(env,1,n_train)
+        all_rewards[run_idx,:] = rewards
+    y = all_rewards.mean(axis=0)[0:n_train:10]
+    x = np.arange(0,n_train,test_interval)
+    y_max = all_rewards.max(axis = 0)[0:n_train:10]
+    y_min = all_rewards.min(axis = 0)[0:n_train:10]
+    y_err_asym = [y_min, y_max]
+    y_err = all_rewards.max(axis = 0) - all_rewards.min(axis = 0)
+    plt.figure(0)
+    plt.errorbar(x, y, yerr = y_err_asym)
+    plt.xlabel('number of training steps')
+    plt.ylabel('reward')
+    plt.savefig('LSBGreedy_training_progress_%dchoose%d_%dp.eps'%(codebook_size,n_ssb,snr_pt), format='eps', dpi=300) 
+    
         

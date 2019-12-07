@@ -130,7 +130,7 @@ class CUCB():
         self.Nt = np.zeros(self.num_arms)
         self.Qt = np.zeros(self.num_arms)
         self.t = 1
-        self.oracle = Oracle(oversampling_factor = int(num_arms/64), greedy=True)
+        self.oracle = Oracle(oversampling_factor = int(num_arms/64), greedy=False)
   
     def select_arms(self, k:int):
         if self.t <= self.num_arms: #initialization steps
@@ -181,8 +181,8 @@ def ucb_train_test(max_arr_rate = 10,
     env = InitialAccessEnv(oversampling_factor=oversampling_f,num_beams_possible=n_ssb,snr_thold_percentil = snr_percentile, bandit=True)
     ucb = CUCB(num_arms=codebook_size,scale_factor=max_arr_rate)   
     all_beams = []
-#    for train_step_idx in tqdm(range(num_train_step)):
-    for train_step_idx in range(num_train_step):
+    for train_step_idx in tqdm(range(num_train_step)):
+#    for train_step_idx in range(num_train_step):
         a_t = ucb.select_arms(n_ssb)
         s_t_1, r_t, done, info = env.step(a_t)
         ucb.update(a_t, s_t_1)
@@ -196,19 +196,49 @@ def ucb_train_test(max_arr_rate = 10,
     predicted_beams = np.where(ucb.greedy_select_arms(n_ssb)>0)[0]
     return ucb, rewards, true_usable_beams, true_beam_count, predicted_beams
 
+#if __name__ == "__main__":
+#    n_antenna = 64
+#    arr_rate = 5
+#    n_ssb = 32
+#    oversample_f = 4
+#    snr_pt = 95
+#    n_run = 1
+#    n_train = 200
+#    test_interval = 10
+#    n_test = 10
+#    codebook_size = n_antenna*oversample_f
+#    all_rewards = np.zeros((n_run, int(n_train/test_interval)))
+#    for run_idx in range(n_run):
+#        ucb, rewards, true_usable_beams, true_beam_count, predicted_beams = ucb_train_test(max_arr_rate = arr_rate, 
+#                                                                                           n_ssb = n_ssb,
+#                                                                                           oversampling_f = oversample_f,
+#                                                                                           num_train_step = n_train, 
+#                                                                                           test_every = test_interval, 
+#                                                                                           num_test_steps = n_test,
+#                                                                                           snr_percentile = snr_pt)
+#        all_rewards[run_idx,:] = rewards.mean(axis=1)
+#    y = all_rewards.mean(axis=0)
+#    x = np.arange(0,n_train,test_interval)
+#    plt.figure(0)
+#    plt.plot(x, y)
+#    plt.xlabel('number of training steps')
+#    plt.ylabel('reward')
+##    plt.savefig('CUCB_greedy_training_progress_%dchoose%d_%dp.eps'%(codebook_size,n_ssb,snr_pt), format='eps', dpi=300) 
+#    plt.savefig('CUCB_nongreedy_training_progress_%dchoose%d_%dp.eps'%(codebook_size,n_ssb,snr_pt), format='eps', dpi=300)   
+    
 if __name__ == "__main__":
     n_antenna = 64
     arr_rate = 5
     n_ssb = 32
-    oversample_f = 1
-    snr_pt = 100
+    oversample_f = 4
+    snr_pt = 95
     n_run = 10
-    n_train = 500
-    test_interval = 10
+    n_train = 100
+    test_interval = 5
     n_test = 10
     codebook_size = n_antenna*oversample_f
     all_rewards = np.zeros((n_run, int(n_train/test_interval)))
-    for run_idx in tqdm(range(n_run)):
+    for run_idx in range(n_run):
         ucb, rewards, true_usable_beams, true_beam_count, predicted_beams = ucb_train_test(max_arr_rate = arr_rate, 
                                                                                            n_ssb = n_ssb,
                                                                                            oversampling_f = oversample_f,
@@ -219,13 +249,16 @@ if __name__ == "__main__":
         all_rewards[run_idx,:] = rewards.mean(axis=1)
     y = all_rewards.mean(axis=0)
     x = np.arange(0,n_train,test_interval)
+    y_max = all_rewards.max(axis = 0)
+    y_min = all_rewards.min(axis = 0)
+    y_err_asym = [y_min, y_max]
     y_err = all_rewards.max(axis = 0) - all_rewards.min(axis = 0)
     plt.figure(0)
-    plt.errorbar(x, y, yerr = y_err)
+    plt.errorbar(x, y, yerr = y_err_asym)
     plt.xlabel('number of training steps')
     plt.ylabel('reward')
-    plt.savefig('CUCB_greedy_training_progress_%dchoose%d_%dp.eps'%(codebook_size,n_ssb,snr_pt), format='eps', dpi=300) 
-#    plt.savefig('CUCB_nongreedy_training_progress_%dchoose%d_%dp.eps'%(codebook_size,n_ssb,snr_pt), format='eps', dpi=300)   
+#    plt.savefig('CUCB_greedy_training_progress_%dchoose%d_%dp.eps'%(codebook_size,n_ssb,snr_pt), format='eps', dpi=300) 
+    plt.savefig('CUCB_nongreedy_morerun_errbar_training_progress_%dchoose%d_%dp.eps'%(codebook_size,n_ssb,snr_pt), format='eps', dpi=300)   
     
 #if __name__ == "__main__":
 #    n_antenna = 64
