@@ -64,6 +64,7 @@ class Oracle():
         self.oversampling_factor = oversampling_factor
         self.n_antenna = 64
         self.n_arms = int(self.oversampling_factor*self.n_antenna)
+#        self.bfdirections = np.arccos(np.linspace(np.cos(0),np.cos(np.pi-1e-6),self.n_arms))
         self.bfdirections = np.arccos(np.linspace(np.cos(-np.pi/2),np.cos(np.pi/2),self.n_arms))
         self.codebook_all = np.zeros((self.n_arms,self.n_antenna),dtype=np.complex_)
         self.greedy = greedy
@@ -76,32 +77,60 @@ class Oracle():
     def calc_pairwise_coorrelation(self, a, At):
         pairwise_correlation = [self.codebook_xcorrelation[a,i] for i in At]
         return pairwise_correlation
-
+    
+    def valid_arm_pool(self, a):
+        """
+        return the indices of arms in all arms with a significant correlation with a
+        """
+        return np.delete(np.mod(np.arange(a-self.oversampling_factor, a+self.oversampling_factor+1), self.n_arms), self.oversampling_factor)
+#        return np.mod(np.concatenate((np.arange(a-self.oversampling_factor,a),np.arange(a+1,a+self.oversampling_factor+1))), self.n_arms)
+    
+#    def incremental_util(self, a, At, s):
+#        if len(At) == 0:
+#            raw_utility_vec = np.zeros(self.n_arms)
+#            pairwise_correlation_all = self.calc_pairwise_coorrelation(a, np.arange(self.n_arms))
+#            return sum(np.multiply(pairwise_correlation_all, s))
+##            for i in np.arange(self.n_arms):
+##                raw_utility_vec[i] = abs(pairwise_correlation_all[i]*s[i])
+##            return sum(raw_utility_vec)
+#        else:
+#            unselected = np.setdiff1d(np.arange(self.n_arms),At)
+#            pairwise_correlation_all = self.calc_pairwise_coorrelation(a, np.arange(self.n_arms))
+#            raw_utility_vec = np.zeros(self.n_arms)
+#            for i in unselected:
+#                correlation_i = sum(self.calc_pairwise_coorrelation(i,At))/len(At)
+#                raw_utility_vec[i] = abs(pairwise_correlation_all[i]*s[i]*(1-correlation_i))
+#            return sum(raw_utility_vec)
+#        
     def incremental_util(self, a, At, s):
+        """
+        a: target arm
+        At: selected arms
+        s: util vector
+        """
+        valid_neighbors = self.valid_arm_pool(a)
         if len(At) == 0:
-            raw_utility_vec = np.zeros(self.n_arms)
-            pairwise_correlation_all = self.calc_pairwise_coorrelation(a, np.arange(self.n_arms))
-            for i in np.arange(self.n_arms):
-                raw_utility_vec[i] = abs(pairwise_correlation_all[i]*s[i])
-            return sum(raw_utility_vec)
+            correlation_neighbors = self.calc_pairwise_coorrelation(a, valid_neighbors)
+            return sum(np.multiply(correlation_neighbors, s[valid_neighbors]))
         else:
-            unselected = np.setdiff1d(np.arange(self.n_arms),At)
-            pairwise_correlation_all = self.calc_pairwise_coorrelation(a, np.arange(self.n_arms))
-            raw_utility_vec = np.zeros(self.n_arms)
-            for i in unselected:
-                correlation_i = sum(self.calc_pairwise_coorrelation(i,At))/len(At)
-                raw_utility_vec[i] = abs(pairwise_correlation_all[i]*s[i]*(1-correlation_i))
-            return sum(raw_utility_vec)
+            len_At = len(At)
+            valid_pool = [i for i in valid_neighbors if i not in At]
+            selected_neighbors = [i for i in valid_neighbors if i in At]
+            correlation_pool = self.calc_pairwise_coorrelation(a, valid_pool)
+            decorrelation_pool = [1-sum(self.calc_pairwise_coorrelation(i, selected_neighbors))/len_At for i in valid_pool]
+            return sum(np.multiply(np.multiply(correlation_pool, s[valid_pool]),decorrelation_pool))        
+
 
     def select(self,u:np.array, k:int):
         if self.greedy:
-            chosen = []
-            for i in range(k):
-                pool = np.setdiff1d(np.arange(len(u)),chosen)
-                u_pool = u[pool]
-                sel = pool[np.argmax(u_pool)]
-                chosen.append(sel)
-            return chosen    
+            chosen = np.fliplr(np.argsort(u)[-k:])
+#            chosen = []
+#            for i in range(k):
+#                pool = np.setdiff1d(np.arange(len(u)),chosen)
+#                u_pool = u[pool]
+#                sel = pool[np.argmax(u_pool)]
+#                chosen.append(sel)
+#            return chosen    
         else:
             chosen = []
             for i in range(k):
@@ -226,75 +255,75 @@ def ucb_train_test(max_arr_rate = 10,
 ##    plt.savefig('CUCB_greedy_training_progress_%dchoose%d_%dp.eps'%(codebook_size,n_ssb,snr_pt), format='eps', dpi=300) 
 #    plt.savefig('CUCB_nongreedy_training_progress_%dchoose%d_%dp.eps'%(codebook_size,n_ssb,snr_pt), format='eps', dpi=300)   
     
-if __name__ == "__main__":
-    n_antenna = 64
-    arr_rate = 5
-    n_ssb = 32
-    oversample_f = 4
-    snr_pt = 95
-    n_run = 10
-    n_train = 100
-    test_interval = 5
-    n_test = 10
-    codebook_size = n_antenna*oversample_f
-    all_rewards = np.zeros((n_run, int(n_train/test_interval)))
-    for run_idx in range(n_run):
-        ucb, rewards, true_usable_beams, true_beam_count, predicted_beams = ucb_train_test(max_arr_rate = arr_rate, 
-                                                                                           n_ssb = n_ssb,
-                                                                                           oversampling_f = oversample_f,
-                                                                                           num_train_step = n_train, 
-                                                                                           test_every = test_interval, 
-                                                                                           num_test_steps = n_test,
-                                                                                           snr_percentile = snr_pt)
-        all_rewards[run_idx,:] = rewards.mean(axis=1)
-    y = all_rewards.mean(axis=0)
-    x = np.arange(0,n_train,test_interval)
-    y_max = all_rewards.max(axis = 0)
-    y_min = all_rewards.min(axis = 0)
-    y_err_asym = [y_min, y_max]
-    y_err = all_rewards.max(axis = 0) - all_rewards.min(axis = 0)
-    plt.figure(0)
-    plt.errorbar(x, y, yerr = y_err_asym)
-    plt.xlabel('number of training steps')
-    plt.ylabel('reward')
-#    plt.savefig('CUCB_greedy_training_progress_%dchoose%d_%dp.eps'%(codebook_size,n_ssb,snr_pt), format='eps', dpi=300) 
-    plt.savefig('CUCB_nongreedy_morerun_errbar_training_progress_%dchoose%d_%dp.eps'%(codebook_size,n_ssb,snr_pt), format='eps', dpi=300)   
-    
 #if __name__ == "__main__":
 #    n_antenna = 64
 #    arr_rate = 5
 #    n_ssb = 32
 #    oversample_f = 4
 #    snr_pt = 95
-#    n_train = 500
-#    test_interval = 1
+#    n_run = 10
+#    n_train = 100
+#    test_interval = 5
 #    n_test = 10
 #    codebook_size = n_antenna*oversample_f
-#    ucb, rewards, true_usable_beams, true_beam_count, predicted_beams = ucb_train_test(max_arr_rate = arr_rate, 
-#                                                                                       n_ssb = n_ssb,
-#                                                                                       oversampling_f = oversample_f,
-#                                                                                       num_train_step = n_train, 
-#                                                                                       test_every = test_interval, 
-#                                                                                       num_test_steps = n_test,
-#                                                                                       snr_percentile = snr_pt)
-#    print(np.setdiff1d(true_usable_beams,predicted_beams))
+#    all_rewards = np.zeros((n_run, int(n_train/test_interval)))
+#    for run_idx in range(n_run):
+#        ucb, rewards, true_usable_beams, true_beam_count, predicted_beams = ucb_train_test(max_arr_rate = arr_rate, 
+#                                                                                           n_ssb = n_ssb,
+#                                                                                           oversampling_f = oversample_f,
+#                                                                                           num_train_step = n_train, 
+#                                                                                           test_every = test_interval, 
+#                                                                                           num_test_steps = n_test,
+#                                                                                           snr_percentile = snr_pt)
+#        all_rewards[run_idx,:] = rewards.mean(axis=1)
+#    y = all_rewards.mean(axis=0)
+#    x = np.arange(0,n_train,test_interval)
+#    y_max = all_rewards.max(axis = 0)
+#    y_min = all_rewards.min(axis = 0)
+#    y_err_asym = [y_min, y_max]
+#    y_err = all_rewards.max(axis = 0) - all_rewards.min(axis = 0)
 #    plt.figure(0)
-#    plt.plot(rewards.mean(axis=1))
-#    print(true_usable_beams)
-#    print(predicted_beams)
-#    true_beam_dist = np.zeros(codebook_size)
-#    true_beam_dist[true_usable_beams] = true_beam_count/sum(true_beam_count)
-#    plt.figure(1)
-#    plt.bar(np.arange(codebook_size),true_beam_dist)
-#    plt.xlabel('beam index')
-#    plt.ylabel('frequency')
-##    plt.title('true dist of beams')
+#    plt.errorbar(x, y, yerr = y_err_asym)
+#    plt.xlabel('number of training steps')
+#    plt.ylabel('reward')
+##    plt.savefig('CUCB_greedy_training_progress_%dchoose%d_%dp.eps'%(codebook_size,n_ssb,snr_pt), format='eps', dpi=300) 
+#    plt.savefig('CUCB_nongreedy_morerun_errbar_training_progress_%dchoose%d_%dp.eps'%(codebook_size,n_ssb,snr_pt), format='eps', dpi=300)   
+#    
+if __name__ == "__main__":
+    n_antenna = 64
+    arr_rate = 5
+    n_ssb = 32
+    oversample_f = 4
+    snr_pt = 95
+    n_train = 500
+    test_interval = 1
+    n_test = 10
+    codebook_size = n_antenna*oversample_f
+    ucb, rewards, true_usable_beams, true_beam_count, predicted_beams = ucb_train_test(max_arr_rate = arr_rate, 
+                                                                                       n_ssb = n_ssb,
+                                                                                       oversampling_f = oversample_f,
+                                                                                       num_train_step = n_train, 
+                                                                                       test_every = test_interval, 
+                                                                                       num_test_steps = n_test,
+                                                                                       snr_percentile = snr_pt)
+    print(np.setdiff1d(true_usable_beams,predicted_beams))
+    plt.figure(0)
+    plt.plot(rewards.mean(axis=1))
+    print(true_usable_beams)
+    print(predicted_beams)
+    true_beam_dist = np.zeros(codebook_size)
+    true_beam_dist[true_usable_beams] = true_beam_count/sum(true_beam_count)
+    plt.figure(1)
+    plt.bar(np.arange(codebook_size),true_beam_dist)
+    plt.xlabel('beam index')
+    plt.ylabel('frequency')
+#    plt.title('true dist of beams')
 #    plt.savefig('True_beam_freq_%dchoose%d_%dp.eps'%(codebook_size,n_ssb,snr_pt), format='eps', dpi=300) 
-#    plt.figure(2)
-#    plt.bar(np.arange(codebook_size),ucb.Qt)
-#    plt.xlabel('beam index')
-#    plt.ylabel('estimated expected reward')
-##    plt.title('UCB estimated reward of beams')     
+    plt.figure(2)
+    plt.bar(np.arange(codebook_size),ucb.Qt)
+    plt.xlabel('beam index')
+    plt.ylabel('estimated expected reward')
+#    plt.title('UCB estimated reward of beams')     
 #    plt.savefig('CUCB_nongreedy_beam_weight_%dchoose%d_%dp.eps'%(codebook_size,n_ssb,snr_pt), format='eps', dpi=300)   
 
     

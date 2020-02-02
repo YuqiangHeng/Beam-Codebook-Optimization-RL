@@ -12,7 +12,7 @@ h_real_fname = "H_Matrices FineGrid/MISO_Static_FineGrid_Hmatrices_real.npy"
 ue_loc_fname = "H_Matrices FineGrid/MISO_Static_FineGrid_UE_location.npy"
 bs_loc = [641,435,10]
 n_antenna = 64
-oversample_factor = 1
+oversample_factor = 2
 
 nseg = int(n_antenna*oversample_factor)
 ##generate array response vectors

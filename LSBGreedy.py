@@ -21,12 +21,13 @@ oversample_factor = 4
 
 nseg = int(n_antenna*oversample_factor)
 #generate array response vectors
-bins = np.linspace(-np.pi/2,np.pi/2,nseg+1)
+#bins = np.linspace(-np.pi/2,np.pi/2,nseg+1)
+#bins = np.linspace(0,np.pi,nseg+1)
 #bins = [(i-nseg/2)*2*np.pi/nseg for i in range(nseg+1)]
 #bins = [i*2*np.pi/nseg for i in range(nseg+1)]
 #bfdirections = [(bins[i]+bins[i+1])/2 for i in range(nseg)]
-bfdirections = np.arccos(np.linspace(np.cos(-np.pi/2),np.cos(np.pi/2),nseg))
-#bfdirections = np.linspace(-np.pi/2,np.pi/2,nseg)
+#bfdirections = np.arccos(np.linspace(np.cos(-np.pi/2),np.cos(np.pi/2),nseg))
+bfdirections = np.arccos(np.linspace(np.cos(0),np.cos(np.pi-1e-6),nseg))
 codebook_all = np.zeros((nseg,n_antenna),dtype=np.complex_)
 
 for i in range(nseg):
@@ -77,9 +78,14 @@ lambda_t = 1
 alpha_t = 1
 
 def calc_pairwise_coorrelation(a, At):
+    """
+    input: a - target beam
+           At - selected beam set
+    output: a vector containing correlation of a with each beam in At
+    """
 #    pairwise_correlation = [abs(sum(np.multiply(codebook_all[a,:],np.conj(codebook_all[i,:]))))**2 for i in At]
     pairwise_correlation = [codebook_xcorrelation[a,i] for i in At]
-    return pairwise_correlation
+    return pairwise_correlation 
 
 def incremental_util_vec(a, At, s):
     if len(At) == 0:

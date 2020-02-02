@@ -80,7 +80,7 @@ class InitialAccessEnv(gym.Env):
         self.observation_space = spaces.MultiDiscrete(np.inf*np.ones(self.codebook_size))
         self.n_ue_per_beam = np.zeros((self.codebook_size))
         self.true_state = np.zeros((self.codebook_size))
-        self.gaussian_center = GaussianCenters(arrival_rate = self.mean_arr_rate, cluster_variance = self.cluster_var)
+        self.gaussian_center = GaussianCenters(n_clusters = 4, arrival_rate = self.mean_arr_rate, cluster_variance = self.cluster_var)
         self.h = np.load(h_real_fname) + 1j*np.load(h_imag_fname)
         self.ue_loc = np.load(ue_loc_fname)
 #        self.unique_x = np.unique(self.ue_loc[:,0])
