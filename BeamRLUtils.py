@@ -69,16 +69,17 @@ class Uniform_UE():
         num_sample = np.random.randint(0, self.arrival_rate*2)
         return num_sample, np.random.choice(self.tot_num_pts, num_sample, replace = False)
     
-class BirthDeathGaussianCenters():
+class CrossFadeGaussianCenters():
     def __init__(self, 
 #               means:np.array=default_means, #2-d array w/. shape lx2, l centers
 #               covs:np.array=default_covs, #3-d array w/. shape lx2x2, covariance of each center
 #               arrival_rates:np.array=default_arr_rates # 1-d lx1 array, arrival rates of UEs at each center
-               n_clusters: int = 4, arrival_rate = 5, cluster_variance = 5, tot_num_pts:int = 58725,
+               n_clusters: int = 4, arrival_rate = 5, cluster_variance = 5, tot_num_pts:int = 58725, cluster
                ):
         self.arrival_rate = arrival_rate
         self.cluster_variance = cluster_variance
         self.tot_num_pts = tot_num_pts
+        self.n_clusters = n_clusters
 #        assert means.shape[1] == covs.shape[1] == covs.shape[2] == 2
 #        assert means.shape[0] == covs.shape[0] == arrival_rates.shape[0]
         default_means = np.array([[640,470],[600,460],[680,460],[640,400]])
@@ -86,12 +87,49 @@ class BirthDeathGaussianCenters():
         default_covs = np.array([[[self.cluster_variance,0],[0,self.cluster_variance]] for i in default_means])
         default_arr_rates = np.array([arrival_rate for i in default_means])
         self.means = default_means
+        self.current_cluster_centers = default_means
+        self.new_cluster_centers = np.zeros((self.n_clusters,2))
         self.covs = default_covs
-        self.arrival_rates = default_arr_rates
-        self.n_clusters = n_clusters
+        self.default_arrival_rates = default_arr_rates
+        self.arrival_rates_current_clusters = self.default_arrival_rates
+        self.arrival_rates_new_clusters = np.zeros(self.n_clusters)
         self.all_loc = np.load(ue_loc_fname)[:,0:2]
+        self.in_cross_fade = False
+        self.cross_fade_counter = 0
+        
+    def change_cluster(self):
+        """
+        change in clusters (according to a time-varying UE arrival process)
+        the arrival rates are constant (same distributions)
+            1. generate new cluster centers, arrival rates of new clusters are set to 0
+            2. set in_cross_fade flag to true
+            3. while in_cross_fade, each time new UEs are sampled, the arrival rates of old clusters decay, and those of new clusters increase
+            4. when arrival rates of new clusters reach default_arrival_rates, and those of old_clusters reach 0, update old_clusters to be new_clusters
+        """
+        self.new_cluster_centers = self.gen_new_clusters()
+        self.arrival_rates_new_clusters = np.zeros(self.n_clusters)
+        self.in_cross_fade = True
+        self.cross_fade_counter = 0
+        
+    def reset(self):
+        self.current_cluster_centers = default_means
+        self.new_cluster_centers = np.zeros((self.n_clusters,2))
+        self.covs = default_covs
+        self.default_arrival_rates = default_arr_rates
+        self.arrival_rates_current_clusters = self.default_arrival_rates
+        self.arrival_rates_new_clusters = np.zeros(self.n_clusters)
+        self.all_loc = np.load(ue_loc_fname)[:,0:2]
+        self.in_cross_fade = False
+        self.cross_fade_counter = 0
         
     def gen_new_clusters(self):
+        """
+        generate new cluster centers:
+            number of clusters is the same
+            randomly sample ray-traced UE points as cluster centers
+            use a repulsion mechanism so that cluster centers are seperated by at least n*covariance of each cluster
+        return: n_cluter x 2 array (loc of new cluster centers)
+        """
         new_cluster_centers = np.zeros((self.n_clusters,2))
         for cluster_idx in range(self.n_clusters):       
             if cluster_idx == 0:
@@ -108,7 +146,27 @@ class BirthDeathGaussianCenters():
                         break
         return new_cluster_centers 
                      
-
+    def sample(self) -> Tuple[int, np.array]:
+        """
+        if in_cross_fade:
+            cross fade arrival rates
+        output:
+            n x 2 array, coordinates of n UEs generated according to arrival rates and centers
+            assuming poisson arrival at each center
+        """
+        if self.in_cross_fade:
+            
+            
+            
+        else: 
+    #        num_UEs = np.random.poisson(lam = self.arrival_rates).astype(int)
+            num_UEs = np.random.randint(0,self.arrival_rate*2,len(self.arrival_rates)) #uniform arrival rate so that its bounded
+            total_num_UEs = sum(num_UEs)
+            all_samples = np.zeros((total_num_UEs,2))
+            for i in range(self.arrival_rates.shape[0]):
+                samples = np.random.multivariate_normal(self.means[i,:], self.covs[i,:,:], num_UEs[i])
+                all_samples[sum(num_UEs[0:i]):sum(num_UEs[0:i+1]),:] = samples
+            return total_num_UEs, all_samples
     
 #class TimeVaryingGaussianCenters():
 #    def __init__(self, 
