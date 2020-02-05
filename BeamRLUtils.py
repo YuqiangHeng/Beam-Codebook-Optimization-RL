@@ -7,6 +7,8 @@ Created on Tue Nov 19 14:55:17 2019
 import numpy as np
 from typing import Tuple
 
+np.random.seed(0)
+
 
 #time_factor = 20
 #cov_factor = 5
@@ -25,7 +27,7 @@ class GaussianCenters():
 #               means:np.array=default_means, #2-d array w/. shape lx2, l centers
 #               covs:np.array=default_covs, #3-d array w/. shape lx2x2, covariance of each center
 #               arrival_rates:np.array=default_arr_rates # 1-d lx1 array, arrival rates of UEs at each center
-               n_clusters = 4, arrival_rate = 5, cluster_variance = 5
+               n_clusters = 4, arrival_rate = 5, cluster_variance = 5, random_clusters = False
                ):
         self.arrival_rate = arrival_rate
         self.cluster_variance = cluster_variance
@@ -35,10 +37,42 @@ class GaussianCenters():
         bs_loc = [641,435]
         default_covs = np.array([[[self.cluster_variance,0],[0,self.cluster_variance]] for i in default_means])
         default_arr_rates = np.array([arrival_rate for i in default_means])
-        self.means = default_means
-        self.covs = default_covs
-        self.arrival_rates = default_arr_rates
-        self.n_cluster = n_clusters
+        self.n_clusters = n_clusters
+        self.random_clusters = random_clusters
+        self.all_loc = np.load(ue_loc_fname)[:,0:2]
+        self.tot_num_pts = self.all_loc.shape[0]
+        if self.random_clusters:
+            self.current_cluster_centers = self.gen_new_clusters()
+            self.covs =  np.array([[[self.cluster_variance,0],[0,self.cluster_variance]] for i in range(self.n_clusters)])
+            self.arrival_rates = np.array([arrival_rate for i in range(self.n_clusters)])
+        else: 
+            self.current_cluster_centers = default_means
+            self.covs = default_covs
+            self.arrival_rates = default_arr_rates
+
+    def gen_new_clusters(self):
+        """
+        generate new cluster centers:
+            number of clusters is the same
+            randomly sample ray-traced UE points as cluster centers
+            use a repulsion mechanism so that cluster centers are seperated by at least n*covariance of each cluster
+        return: n_cluter x 2 array (loc of new cluster centers)
+        """
+        new_cluster_centers = np.zeros((self.n_clusters,2))
+        for cluster_idx in range(self.n_clusters):       
+            if cluster_idx == 0:
+                sample_loc_idx = np.random.choice(self.tot_num_pts)
+                sample_loc = self.all_loc[sample_loc_idx]     
+                new_cluster_centers[cluster_idx,:] = sample_loc
+            else:
+                while True:
+                    sample_loc_idx = np.random.choice(self.tot_num_pts)
+                    sample_loc = self.all_loc[sample_loc_idx]    
+                    min_dist = min(np.linalg.norm(new_cluster_centers[0:cluster_idx,:] - sample_loc, axis=1))
+                    if min_dist > 2*self.cluster_variance:
+                        new_cluster_centers[cluster_idx,:] = sample_loc
+                        break
+        return new_cluster_centers 
         
     def sample(self) -> Tuple[int, np.array]:
         """
@@ -50,8 +84,8 @@ class GaussianCenters():
         num_UEs = np.random.randint(0,self.arrival_rate*2,len(self.arrival_rates)) #uniform arrival rate so that its bounded
         total_num_UEs = sum(num_UEs)
         all_samples = np.zeros((total_num_UEs,2))
-        for i in range(self.arrival_rates.shape[0]):
-            samples = np.random.multivariate_normal(self.means[i,:], self.covs[i,:,:], num_UEs[i])
+        for i in range(self.n_clusters):
+            samples = np.random.multivariate_normal(self.current_cluster_centers[i,:], self.covs[i,:,:], num_UEs[i])
             all_samples[sum(num_UEs[0:i]):sum(num_UEs[0:i+1]),:] = samples
         return total_num_UEs, all_samples
     
@@ -99,7 +133,7 @@ class CrossFadeGaussianCenters():
         self.all_loc = np.load(ue_loc_fname)[:,0:2]
         self.in_cross_fade = False
         self.cross_fade_counter = 0
-        self.cross_fade_duration = 100
+        self.cross_fade_duration = 10
         self.cross_fade_step = self.arrival_rate / self.cross_fade_duration
 
         
@@ -129,7 +163,7 @@ class CrossFadeGaussianCenters():
         self.all_loc = np.load(ue_loc_fname)[:,0:2]
         self.in_cross_fade = False
         self.cross_fade_counter = 0
-        self.cross_fade_duration = 100
+        self.cross_fade_duration = 10
         self.cross_fade_step = self.arrival_rate / self.cross_fade_duration
         
     def gen_new_clusters(self):
@@ -210,20 +244,24 @@ class CrossFadeGaussianCenters():
 #        self.cluster_variance = cluster_variance 
 #        self.t = 0
         
-        
+import matplotlib.pyplot as plt        
 if __name__ == "__main__":
 #    gc = GaussianCenters()
 #    for i in range(5):
 #        print(gc.sample()[1].shape)
-    tvgc = CrossFadeGaussianCenters()
-    for i in range(50):
-        sample = tvgc.sample()
-        if i == 30:
-            tvgc.change_cluster(cross_fade_duration=10)
-        if tvgc.in_cross_fade:
-            print('cv')
-#        print(np.concatenate((tvgc.arrival_rates_current_clusters,tvgc.arrival_rates_new_clusters)))
-        print(np.transpose(np.concatenate((tvgc.current_cluster_centers, tvgc.new_cluster_centers),axis=0)))
-        
-        
+#    tvgc = CrossFadeGaussianCenters()
+#    for i in range(50):
+#        sample = tvgc.sample()
+#        if i == 30:
+#            tvgc.change_cluster(cross_fade_duration=10)
+#        if tvgc.in_cross_fade:
+#            print('cv')
+##        print(np.concatenate((tvgc.arrival_rates_current_clusters,tvgc.arrival_rates_new_clusters)))
+#        print(np.transpose(np.concatenate((tvgc.current_cluster_centers, tvgc.new_cluster_centers),axis=0)))
+    rgc = GaussianCenters(n_clusters=8, random_clusters=True)
+    print(rgc.current_cluster_centers)
+    all_loc = np.load(ue_loc_fname)
+    plt.figure(0)
+    plt.scatter(all_loc[:,0],all_loc[:,1])
+    plt.scatter(rgc.current_cluster_centers[:,0],rgc.current_cluster_centers[:,1],marker='o',s=100,c='red')    
 

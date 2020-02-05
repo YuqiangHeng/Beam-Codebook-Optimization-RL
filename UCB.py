@@ -8,6 +8,9 @@ Created on Tue Dec  3 16:07:44 2019
 
 import numpy as np
 
+ue_loc_fname = "H_Matrices FineGrid/MISO_Static_FineGrid_UE_location.npy"
+
+
 class UCB():
     def __init__(self, num_arms:int, scale_factor):
         self.num_arms = num_arms
@@ -225,6 +228,52 @@ def ucb_train_test(max_arr_rate = 10,
     predicted_beams = np.where(ucb.greedy_select_arms(n_ssb)>0)[0]
     return ucb, rewards, true_usable_beams, true_beam_count, predicted_beams
 
+def cv_ucb_train_test(max_arr_rate = 10, 
+                   n_ssb = 16,
+                   oversampling_f = 1,
+                   num_train_step = 50, 
+                   test_every = 1, 
+                   num_test_steps = 50,
+                   snr_percentile = 100):
+    n_antenna = 64
+    codebook_size = oversampling_f*n_antenna
+    n_test_steps = int(num_train_step/test_every)
+    rewards = np.zeros((n_test_steps,num_test_steps))
+    env = InitialAccessEnv(oversampling_factor=oversampling_f,num_beams_possible=n_ssb,snr_thold_percentil = snr_percentile, bandit=True)
+    ucb = CUCB(num_arms=codebook_size,scale_factor=max_arr_rate)   
+    all_beams_old = []
+    all_beams_new = []
+    old_cluster_centers = env.gaussian_center.current_cluster_centers
+    new_cluster_centers = []
+    predicted_beams_old = []
+    beam_weights_old = []
+    for train_step_idx in tqdm(range(num_train_step)):
+#    for train_step_idx in range(num_train_step):
+        if train_step_idx == int(num_train_step/2):
+            predicted_beams_old = np.where(ucb.greedy_select_arms(n_ssb)>0)[0]
+            beam_weights_old = ucb.Qt
+            env.gaussian_center.change_cluster()
+        a_t = ucb.select_arms(n_ssb)
+        s_t_1, r_t, done, info = env.step(a_t)
+        ucb.update(a_t, s_t_1)
+        if train_step_idx % test_every == 0:
+            for i in range(num_test_steps):
+                a_t = ucb.greedy_select_arms(n_ssb)
+                s_t_1, r_t, done, info = env.step(a_t)
+                rewards[int(train_step_idx/test_every),i] = r_t
+                if train_step_idx < int(num_train_step/2):
+                    all_beams_old.extend(np.where(info["new_arrival"]>0)[0])
+                else:
+                    all_beams_new.extend(np.where(info["new_arrival"]>0)[0])
+    new_cluster_centers = env.gaussian_center.current_cluster_centers
+    true_usable_beams_old, true_beam_count_old = np.unique(all_beams_old,return_counts=True)
+    true_usable_beams_new, true_beam_count_new = np.unique(all_beams_new,return_counts=True)
+    predicted_beams_new = np.where(ucb.greedy_select_arms(n_ssb)>0)[0]
+    beam_weights_new = ucb.Qt
+#    return ucb, rewards, true_usable_beams, true_beam_count, predicted_beams, old_cluster_centers, new_cluster_centers
+    return rewards, beam_weights_old, beam_weights_new, true_usable_beams_old, true_usable_beams_new, true_beam_count_old, true_beam_count_new, predicted_beams_old, predicted_beams_new, old_cluster_centers, new_cluster_centers
+
+
 #if __name__ == "__main__":
 #    n_antenna = 64
 #    arr_rate = 5
@@ -258,10 +307,10 @@ def ucb_train_test(max_arr_rate = 10,
 #if __name__ == "__main__":
 #    n_antenna = 64
 #    arr_rate = 5
-#    n_ssb = 32
-#    oversample_f = 4
-#    snr_pt = 95
-#    n_run = 10
+#    n_ssb = 16
+#    oversample_f = 1
+#    snr_pt = 100
+#    n_run = 20
 #    n_train = 100
 #    test_interval = 5
 #    n_test = 10
@@ -287,7 +336,7 @@ def ucb_train_test(max_arr_rate = 10,
 #    plt.xlabel('number of training steps')
 #    plt.ylabel('reward')
 ##    plt.savefig('CUCB_greedy_training_progress_%dchoose%d_%dp.eps'%(codebook_size,n_ssb,snr_pt), format='eps', dpi=300) 
-#    plt.savefig('CUCB_nongreedy_morerun_errbar_training_progress_%dchoose%d_%dp.eps'%(codebook_size,n_ssb,snr_pt), format='eps', dpi=300)   
+#    plt.savefig('8cluster_arrival_CUCB_nongreedy_morerun_errbar_training_progress_%dchoose%d_%dp.eps'%(codebook_size,n_ssb,snr_pt), format='eps', dpi=300)   
 #    
 if __name__ == "__main__":
     n_antenna = 64
@@ -299,32 +348,56 @@ if __name__ == "__main__":
     test_interval = 1
     n_test = 10
     codebook_size = n_antenna*oversample_f
-    ucb, rewards, true_usable_beams, true_beam_count, predicted_beams = ucb_train_test(max_arr_rate = arr_rate, 
+    rewards, beam_weights_old, beam_weights_new, true_usable_beams_old, true_usable_beams_new, true_beam_count_old, true_beam_count_new, predicted_beams_old, predicted_beams_new, old_cluster_centers, new_cluster_centers = cv_ucb_train_test(max_arr_rate = arr_rate, 
                                                                                        n_ssb = n_ssb,
                                                                                        oversampling_f = oversample_f,
                                                                                        num_train_step = n_train, 
                                                                                        test_every = test_interval, 
                                                                                        num_test_steps = n_test,
                                                                                        snr_percentile = snr_pt)
-    print(np.setdiff1d(true_usable_beams,predicted_beams))
+#    print(np.setdiff1d(true_usable_beams,predicted_beams))
     plt.figure(0)
     plt.plot(rewards.mean(axis=1))
-    print(true_usable_beams)
-    print(predicted_beams)
-    true_beam_dist = np.zeros(codebook_size)
-    true_beam_dist[true_usable_beams] = true_beam_count/sum(true_beam_count)
+#    print(true_usable_beams)
+#    print(predicted_beams)
+    true_beam_dist_old = np.zeros(codebook_size)
+    true_beam_dist_old[true_usable_beams_old] = true_beam_count_old/sum(true_beam_count_old)
     plt.figure(1)
-    plt.bar(np.arange(codebook_size),true_beam_dist)
+    plt.bar(np.arange(codebook_size),true_beam_dist_old)
     plt.xlabel('beam index')
     plt.ylabel('frequency')
+    
+    true_beam_dist_new = np.zeros(codebook_size)
+    true_beam_dist_new[true_usable_beams_new] = true_beam_count_new/sum(true_beam_count_new)
+    plt.figure(2)
+    plt.bar(np.arange(codebook_size),true_beam_dist_new)
+    plt.xlabel('beam index')
+    plt.ylabel('frequency')
+#    plt.savefig('Uniform_arrival_true_beam_freq_%dchoose%d_%dp.png'%(codebook_size,n_ssb,snr_pt)) 
 #    plt.title('true dist of beams')
 #    plt.savefig('True_beam_freq_%dchoose%d_%dp.eps'%(codebook_size,n_ssb,snr_pt), format='eps', dpi=300) 
-    plt.figure(2)
-    plt.bar(np.arange(codebook_size),ucb.Qt)
+    plt.figure(3)
+    plt.bar(np.arange(codebook_size), beam_weights_old)
     plt.xlabel('beam index')
     plt.ylabel('estimated expected reward')
+    
+    plt.figure(4)
+    plt.bar(np.arange(codebook_size), beam_weights_new)
+    plt.xlabel('beam index')
+    plt.ylabel('estimated expected reward')
+    
+    all_loc = np.load(ue_loc_fname)[:,0:2]
+    plt.figure(5)
+    plt.scatter(all_loc[:,0],all_loc[:,1])
+    plt.scatter(old_cluster_centers[:,0],old_cluster_centers[:,1],s=100,c='red',marker='o')
+    
+    plt.figure(6)
+    plt.scatter(all_loc[:,0],all_loc[:,1])
+    plt.scatter(new_cluster_centers[:,0],new_cluster_centers[:,1],s=100,c='red',marker='o')
+    
 #    plt.title('UCB estimated reward of beams')     
 #    plt.savefig('CUCB_nongreedy_beam_weight_%dchoose%d_%dp.eps'%(codebook_size,n_ssb,snr_pt), format='eps', dpi=300)   
+#    plt.savefig('Uniform_arrival_CUCB_nongreedy_beam_weight_%dchoose%d_%dp.png'%(codebook_size,n_ssb,snr_pt))   
 
     
 #if __name__ == "__main__":

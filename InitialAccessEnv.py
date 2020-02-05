@@ -81,7 +81,9 @@ class InitialAccessEnv(gym.Env):
         self.n_ue_per_beam = np.zeros((self.codebook_size))
         self.true_state = np.zeros((self.codebook_size))
 #        self.gaussian_center = GaussianCenters(n_clusters = 4, arrival_rate = self.mean_arr_rate, cluster_variance = self.cluster_var)
-        self.gaussian_center = Uniform_UE(arrival_rate = self.mean_arr_rate)        
+#        self.gaussian_center = Uniform_UE(arrival_rate = self.mean_arr_rate)     
+        self.gaussian_center = CrossFadeGaussianCenters()
+#        self.gaussian_center = GaussianCenters(n_clusters = 8, arrival_rate = self.mean_arr_rate, cluster_variance = self.cluster_var, random_clusters=True)
         self.h = np.load(h_real_fname) + 1j*np.load(h_imag_fname)
         self.ue_loc = np.load(ue_loc_fname)
 #        self.unique_x = np.unique(self.ue_loc[:,0])
@@ -119,6 +121,7 @@ class InitialAccessEnv(gym.Env):
         #reward is total number of UEs scheduled
         self.step_reward_log.append(sum(observation))
         return observation, reward, False, {"new_arrival":self.nvalid_ue_per_beam, "nue_per_beam":[len(self.reachable_UEs_per_beam[i]) for i in range(self.codebook_size)]}
+
     
     def reset(self):
         self.new_UE_idx = 0
