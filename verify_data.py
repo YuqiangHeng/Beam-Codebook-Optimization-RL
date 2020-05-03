@@ -11,9 +11,34 @@ h_imag_fname = "H_Matrices FineGrid/MISO_Static_FineGrid_Hmatrices_imag.npy"
 h_real_fname = "H_Matrices FineGrid/MISO_Static_FineGrid_Hmatrices_real.npy"
 ue_loc_fname = "H_Matrices FineGrid/MISO_Static_FineGrid_UE_location.npy"
 bs_loc = [641,435,10]
-n_antenna = 64
-oversample_factor = 2
+n_antenna = 32
+oversample_factor = 1
 
+
+all_h = np.load(h_real_fname) + 1j*np.load(h_imag_fname)
+num_ant_total = all_h.shape[1]
+assert(np.mod(num_ant_total, n_antenna)==0)
+antenna_step = int(num_ant_total/n_antenna)
+subsampled_antennas = np.arange(0,num_ant_total,antenna_step)
+assert(len(subsampled_antennas)==n_antenna)
+h = all_h[:,subsampled_antennas]
+        
+
+nseg = int(n_antenna*oversampling_factor)
+bfdirections = np.arccos(np.linspace(np.cos(0),np.cos(np.pi-1e-6),nseg))
+codebook_all = np.zeros((nseg,n_antenna),dtype=np.complex_)
+default_spacing = 0.5
+spacing = default_spacing * num_ant_total / n_antenna
+for i in range(nseg):
+    phi = bfdirections[i]
+    #array response vector original
+    arr_response_vec = [-1j*2*np.pi*spacing*k*np.cos(phi) for k in range(n_antenna)]
+    # arr_response_vec = [-1j*np.pi*k*np.cos(phi) for k in range(n_antenna)]
+    #array response vector for rotated ULA
+    #arr_response_vec = [1j*np.pi*k*np.sin(phi+np.pi/2) for k in range(64)]
+    codebook_all[i,:] = np.exp(arr_response_vec)/np.sqrt(n_antenna)
+
+    
 nseg = int(n_antenna*oversample_factor)
 ##generate array response vectors
 #bins = np.linspace(-np.pi/2,np.pi/2,nseg+1)
